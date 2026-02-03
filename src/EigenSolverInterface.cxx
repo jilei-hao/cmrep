@@ -2,6 +2,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <cstring>
+#include <cassert>
 
 #include <Eigen/Sparse>
 
