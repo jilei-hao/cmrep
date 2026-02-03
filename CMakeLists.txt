@@ -73,6 +73,7 @@ ENDIF()
 OPTION(CMREP_BUILD_VCG_UTILS "Build utility programs for that use the VCG library" OFF)
 IF(CMREP_BUILD_VCG_UTILS)
 SET(NEED_VCG ON)
+SET(NEED_EIGEN ON)
 ENDIF()
 
 # Build Voronoi skeletonization tool
@@ -134,11 +135,13 @@ SET(CMREP_PDE_LIBS "")
 
 # If we need Eigen, then find Eigen
 IF(NEED_EIGEN)
-FIND_PACKAGE (Eigen3 3.3 REQUIRED)
-IF(EIGEN3_FOUND)
-ADD_DEFINITIONS(-DHAVE_EIGEN)
-INCLUDE_DIRECTORIES(${EIGEN3_INCLUDE_DIR})
-ENDIF()
+  FIND_PACKAGE (Eigen3 5 REQUIRED NO_MODULE)
+  IF(TARGET Eigen3::Eigen)
+    MESSAGE(STATUS "ADDING EIGEN INCLUDE DIRECTORY")
+    ADD_DEFINITIONS(-DHAVE_EIGEN)
+    LINK_LIBRARIES(Eigen3::Eigen)
+    # INCLUDE_DIRECTORIES(${EIGEN3_INCLUDE_DIR})
+  ENDIF()
 ENDIF()
 
 
@@ -180,7 +183,7 @@ SET(MKL_LIBRARY_DIR ${MKL_LIBRARY_DIR} ${LIBDIR})
 ENDFOREACH(LIB)
 
 # TODO: is this necessary?
-IF(EIGEN3_FOUND)
+IF(TARGET Eigen3::Eigen)
 ADD_DEFINITIONS(-DEIGEN_USE_MKL_ALL)
 
 #SET(CMREP_LMSHOOT_LIBS ${CMREP_LMSHOOT_LIBS} ${MKL_LIBRARIES})
@@ -211,10 +214,10 @@ SET(LAPACK_LIBRARY_DIR ${MKL_LIBRARY_DIR} ${LIBDIR})
 ENDFOREACH(LIB)
 
 # TODO: what about this?
-IF(EIGEN3_FOUND)
+IF(TARGET Eigen3::Eigen)
 ADD_DEFINITIONS(-DEIGEN_USE_BLAS)
 # ADD_DEFINITIONS(-DEIGEN_USE_LAPACKE)
-ENDIF(EIGEN3_FOUND)
+ENDIF(TARGET Eigen3::Eigen)
 ENDIF()
 ENDIF()
 ENDIF()
@@ -258,11 +261,16 @@ ENDIF()
 
 # VCG library (for some mesh utilities, like Taubin smooth)
 IF(NEED_VCG)
-FIND_PATH(VCGLIB_DIR NAMES vcg/simplex/vertex/base.h)
-IF(VCGLIB_DIR)
-INCLUDE_DIRECTORIES(${VCGLIB_DIR} ${VCGLIB_DIR}/eigenlib)
-ADD_COMPILE_DEFINITIONS(CMREP_USE_VCG)
-ENDIF(VCGLIB_DIR)
+  FIND_PATH(VCGLIB_DIR NAMES vcg/simplex/vertex/base.h)
+  IF(VCGLIB_DIR)
+    INCLUDE_DIRECTORIES(${VCGLIB_DIR})
+    IF(NOT TARGET Eigen3::Eigen)
+      MESSAGE(STATUS "Including ${VCGLIB_DIR}/eigenlib because VCG needs Eigen")
+    ELSE()
+      MESSAGE(STATUS "VCG will use Eigen from ${EIGEN3_INCLUDE_DIR}")
+    ENDIF()
+    ADD_COMPILE_DEFINITIONS(CMREP_USE_VCG)
+  ENDIF(VCGLIB_DIR)
 ENDIF()
 
 # Qhull
@@ -460,8 +468,10 @@ ADD_LIBRARY(cmrep_meshutil_api
   src/util/MeshTetraSample.cxx
   src/util/MeshImageSample.cxx
   src/util/ReadWriteVTK.cxx
+  src/util/RealImageToMesh.cxx
 )
 
+TARGET_LINK_LIBRARIES(cmrep_meshutil_api  cmrep ${LAPACK_LIBRARIES} cmrep_toms611)
 SET(CMREP_API_LIBRARIES ${CMREP_API_LIBRARIES} cmrep_meshutil_api)
 
 ADD_EXECUTABLE(sphere_splat
@@ -486,6 +496,9 @@ TARGET_LINK_LIBRARIES(mesh_image_sample cmrep_meshutil_api)
 
 ADD_EXECUTABLE(mesh_tetra_sample src/thinexe/mesh_tetra_sample.cxx)
 TARGET_LINK_LIBRARIES(mesh_tetra_sample cmrep_meshutil_api)
+
+ADD_EXECUTABLE(vtklevelset src/thinexe/vtklevelset.cxx)
+TARGET_LINK_LIBRARIES(vtklevelset cmrep_meshutil_api)
 
 ADD_EXECUTABLE(mesh_merge_arrays
   src/util/MeshMergeArrays.cxx
@@ -545,41 +558,31 @@ ADD_EXECUTABLE(tetsample src/util/TetSampleImage.cxx)
 SET(CMREP_UTIL_TOOLS ${CMREP_UTIL_TOOLS} tetdumpattr tetfill tetjac tetmergearr tetsample)
 
 IF(CMREP_BUILD_VCG_UTILS)
-SET(VCG_UTIL_SRC
-  src/util/VCGTriMesh.h
-  src/util/VCGTriMesh.cxx
-  ${VCGLIB_DIR}/wrap/ply/plylib.cpp)
+  SET(VCG_UTIL_SRC
+    src/util/VCGTriMesh.h
+    src/util/VCGTriMesh.cxx
+    ${VCGLIB_DIR}/wrap/ply/plylib.cpp)
 
-ADD_EXECUTABLE(mesh_smooth_curv
-  src/util/MeshSmoothAndCurvature.cxx
-  ${VCG_UTIL_SRC} )
-TARGET_LINK_LIBRARIES(mesh_smooth_curv ${LAPACK_LIBRARIES})
+  TARGET_SOURCES(cmrep_meshutil_api PRIVATE ${VCG_UTIL_SRC})
 
-ADD_EXECUTABLE(mesh_poisson_sample
-  src/util/MeshPoissonSample.cxx
-  ${VCG_UTIL_SRC})
-TARGET_LINK_LIBRARIES(mesh_poisson_sample ${LAPACK_LIBRARIES})
+  ADD_EXECUTABLE(mesh_smooth_curv
+    src/util/MeshSmoothAndCurvature.cxx
+    ${VCG_UTIL_SRC} )
+  TARGET_LINK_LIBRARIES(mesh_smooth_curv ${LAPACK_LIBRARIES})
 
-ADD_EXECUTABLE(mesh_decimate_vcg
-  src/util/MeshDecimateVCG.cxx
-  src/util/ReadWriteVTK.cxx
-  ${VCG_UTIL_SRC})
-TARGET_LINK_LIBRARIES(mesh_decimate_vcg ${LAPACK_LIBRARIES})
+  ADD_EXECUTABLE(mesh_poisson_sample
+    src/util/MeshPoissonSample.cxx
+    ${VCG_UTIL_SRC})
+  TARGET_LINK_LIBRARIES(mesh_poisson_sample ${LAPACK_LIBRARIES})
 
-ADD_EXECUTABLE(vtklevelset
-  src/util/RealImageToMesh.cxx
-  src/util/ReadWriteVTK.cxx
-  ${VCG_UTIL_SRC})
+  ADD_EXECUTABLE(mesh_decimate_vcg
+    src/util/MeshDecimateVCG.cxx
+    src/util/ReadWriteVTK.cxx
+    ${VCG_UTIL_SRC})
+  TARGET_LINK_LIBRARIES(mesh_decimate_vcg ${LAPACK_LIBRARIES})
 
-SET(CMREP_UTIL_TOOLS ${CMREP_UTIL_TOOLS} mesh_smooth_curv mesh_poisson_sample mesh_decimate_vcg vtklevelset)
-TARGET_LINK_LIBRARIES(vtklevelset cmrep ${CMREP_FIT_LIBS} ${LAPACK_LIBRARIES})
-ELSE()
-# vtklevelset can be built without VCG support
-ADD_EXECUTABLE(vtklevelset
-  src/util/RealImageToMesh.cxx
-  src/util/ReadWriteVTK.cxx)
-TARGET_LINK_LIBRARIES(vtklevelset cmrep ${CMREP_FIT_LIBS})
-SET(CMREP_UTIL_TOOLS ${CMREP_UTIL_TOOLS} vtklevelset)
+  SET(CMREP_UTIL_TOOLS ${CMREP_UTIL_TOOLS} mesh_smooth_curv mesh_poisson_sample mesh_decimate_vcg)
+  # TARGET_LINK_LIBRARIES(vtklevelset cmrep ${CMREP_FIT_LIBS} ${LAPACK_LIBRARIES})
 ENDIF()
 
 

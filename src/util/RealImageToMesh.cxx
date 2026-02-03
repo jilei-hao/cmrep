@@ -39,7 +39,7 @@
 
 using namespace std;
 
-int usage()
+int vtklevelset_usage()
 {
   cout << "Usage: vtklevelset [options] input.img output.vtk threshold" << endl;
   cout << "Options: " << endl;
@@ -97,10 +97,10 @@ private:
 
 };
 
-int main(int argc, char *argv[])
+int vtklevelset_main(int argc, char *argv[])
 {
   if(argc < 4)
-    return usage();
+    return vtklevelset_usage();
 
   // Clip image
   const char *imClip = NULL;
@@ -399,4 +399,6 @@ int main(int argc, char *argv[])
 
   // Write the output
   WriteVTKData(mesh, argv[argc-2]);
+
+  return 0;
 }
