@@ -803,8 +803,6 @@ int cmrep_vskel_main(int argc, char *argv[])
     polySave = fltWhy->GetOutput();
     }
 
-  WriteVTKData(polySave, "/tmp/whydoyoucrash.vtk");
-
   // Convert the cell data to point data
   vtkPolyData *final = polySave;
   if(!skipCellDataToPointData)

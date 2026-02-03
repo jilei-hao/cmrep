@@ -262,7 +262,7 @@ int MeshImageSample(int argc, char *argv[], size_t irms, size_t nrms, int interp
     }
 
   // Get the point data
-  vtkPointData *pdat = mesh->GetPointData();
+  vtkSmartPointer<vtkPointData> pdat = mesh->GetPointData();
   char *arrname = argv[argc-1];
 
   // If we are in RMS mode 

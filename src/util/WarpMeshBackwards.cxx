@@ -217,6 +217,9 @@ int WarpMesh(WarpMeshParam &parm)
   lps2ras.set_identity();
   lps2ras(0,0) = -1; lps2ras(1,1) = -1;
 
+  // Read the mesh
+  vtkSmartPointer<TMeshType> mesh = ReadMesh<TMeshType>(parm.fnMeshIn.c_str());
+
   if(parm.flagWarp)
     {
     // Read in the warps
@@ -246,9 +249,6 @@ int WarpMesh(WarpMeshParam &parm)
     ReadMatrix(parm.fnAffine.c_str(), affine);
     }
 
-  // Read the mesh
-  TMeshType *mesh = ReadMesh<TMeshType>(parm.fnMeshIn.c_str());
-
 
   vnl_matrix_fixed<double, 4, 4> ras2ijk = vnl_inverse(ijk2ras);
   vnl_matrix_fixed<double, 4, 4> ras2vtk = vnl_inverse(vtk2ras);
@@ -263,7 +263,7 @@ int WarpMesh(WarpMeshParam &parm)
   vtkFloatArray *pointjacobian = vtkFloatArray::New();
   pointjacobian->SetName("Point Jacobian");
   double total_old_vol = 0;
-  int celltype = ComputeVolumeOrArea(mesh, jacobian, pointjacobian, total_old_vol);
+  int celltype = ComputeVolumeOrArea(mesh.GetPointer(), jacobian, pointjacobian, total_old_vol);
 
   // Update the coordinates
   for(int k = 0; k < mesh->GetNumberOfPoints(); k++)
@@ -293,8 +293,16 @@ int WarpMesh(WarpMeshParam &parm)
 
       // Interpolate the warp at the point
       // cout << "Evaluate at index " << idx[0] << " " << idx[1] << " " << idx[2] << endl;
-      for(size_t d = 0; d < 3; d++)
-        v_warp[d] = func[d]->EvaluateAtContinuousIndex(idx);
+      if(func[0]->IsInsideBuffer(idx))
+        {
+        for(size_t d = 0; d < 3; d++)
+          v_warp[d] = func[d]->EvaluateAtContinuousIndex(idx);
+        }
+      else
+        {
+        for(size_t d = 0; d < 3; d++)
+          v_warp[d] = 0.0;
+        }
       v_warp[3] = 0.0;
 
       // Compute the displacement in RAS coordinates
@@ -368,7 +376,7 @@ int WarpMesh(WarpMeshParam &parm)
       newpointvol->SetName("Point Area");
     }
     double total_new_vol = 0;
-    ComputeVolumeOrArea(mesh, newvol, newpointvol, total_new_vol);
+    ComputeVolumeOrArea(mesh.GetPointer(), newvol, newpointvol, total_new_vol);
 
     // Compute the Jacobian
     for(int i = 0; i < mesh->GetNumberOfCells(); i++)
@@ -438,7 +446,7 @@ int main(int argc, char **argv)
     }
 
   // Check the data type of the input file
-  vtkDataReader *reader = vtkDataReader::New();
+  vtkNew<vtkDataReader> reader;
   reader->SetFileName(parm.fnMeshIn.c_str());
   reader->OpenVTKFile();
   reader->ReadHeader();
@@ -446,17 +454,14 @@ int main(int argc, char **argv)
   // Is this a polydata?
   if(reader->IsFileUnstructuredGrid())
     {
-    reader->Delete();
     return WarpMesh<vtkUnstructuredGrid>(parm);
     }
   else if(reader->IsFilePolyData())
     {
-    reader->Delete();
     return WarpMesh<vtkPolyData>(parm);
     }
   else
     {
-    reader->Delete();
     cerr << "Unsupported VTK data type in input file" << endl;
     return -1;
     }

@@ -39,18 +39,18 @@ template <class TMeshType>
 int MeshMergeArrays(const Parameters &p)
 {
   // Read the reference mesh
-  TMeshType *ref = ReadMesh<TMeshType>(p.fnref.c_str());
+  vtkSmartPointer<TMeshType> ref = ReadMesh<TMeshType>(p.fnref.c_str());
 
   // Read each of the input meshes
-  std::vector<vtkDataArray *> da;
+  std::vector<vtkSmartPointer<vtkDataArray>> da;
   unsigned int comp_total = 0;
   for(auto mesh_fn: p.source_meshes)
     {
-    TMeshType *src = ReadMesh<TMeshType>(mesh_fn.c_str());
+    vtkSmartPointer<TMeshType> src = ReadMesh<TMeshType>(mesh_fn.c_str());
 
     // Get the corresponding array
     int idx = 0;
-    vtkDataArray *arr = (p.flag_cell) 
+    vtkSmartPointer<vtkDataArray> arr = (p.flag_cell) 
       ? src->GetCellData()->GetArray(p.arr_name.c_str(), idx)
       : src->GetPointData()->GetArray(p.arr_name.c_str(), idx);
 
@@ -97,13 +97,13 @@ int MeshMergeArrays(const Parameters &p)
 
   // Create output array
   cout << "Output array will contain " << comp_selected << " components" << endl;
-  vtkFloatArray *array = vtkFloatArray::New();
+  vtkSmartPointer<vtkFloatArray> array = vtkFloatArray::New();
   array->SetNumberOfComponents(comp_selected);
   array->SetNumberOfTuples(p.flag_cell ? ref->GetNumberOfCells() : ref->GetNumberOfPoints());
 
   // Read each of the input meshes and merge their arrays
   int target_index = 0, source_index = 0;
-  for(auto *da_j : da)
+  for(auto da_j : da)
     {
     // Add array to main accumulator
     for(unsigned int q = 0; q < da_j->GetNumberOfComponents(); q++)
